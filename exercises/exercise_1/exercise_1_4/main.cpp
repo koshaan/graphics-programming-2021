@@ -5,6 +5,7 @@
 #include <vector>
 #include <cmath>
 
+# define M_PI           3.14159265  /* pi */
 
 // function declarations
 // ---------------------
@@ -29,7 +30,7 @@ const unsigned int SCR_HEIGHT = 800;
 // ---------------
 const char *vertexShaderSource = "#version 330 core\n"
                                  "layout (location = 0) in vec3 aPos;\n"
-                                 "layout (location = 1) in vec3 aColor;\n"
+                                 "uniform vec3 aColor;\n"
                                  "out vec3 vtxColor; // output a color to the fragment shader\n"
                                  "void main()\n"
                                  "{\n"
@@ -179,22 +180,50 @@ void createArrayBuffer(const std::vector<float> &array, unsigned int &VBO){
 void setupShape(const unsigned int shaderProgram,unsigned int &VAO, unsigned int &vertexCount){
 
     unsigned int posVBO, colorVBO;
-    createArrayBuffer(std::vector<float>{
-            // position
-            0.0f,  0.0f, 0.0f,
-            0.5f,  0.0f, 0.0f,
-            0.5f,  0.5f, 0.0f
-    }, posVBO);
+    int circleCount = 30;
+    vertexCount = 3*circleCount;
 
-    createArrayBuffer( std::vector<float>{
-            // color
-            1.0f,  0.0f, 0.0f,
-            1.0f,  0.0f, 0.0f,
-            1.0f,  0.0f, 0.0f
-    }, colorVBO);
+    std::vector<float> positions;
+
+    for(int i = 0; i < 360; i += (360/circleCount)) {
+        std::cout << sin(i * M_PI / 180)/2.0 << " ";
+        std::cout << sin((i+(360/circleCount)) * M_PI / 180)/2.0 << "\r\n";
+        std::cout << i << " " << (i + (360/circleCount)) << "\r\n";
+
+        positions.push_back(sin(i * M_PI / 180)/2);
+        positions.push_back(cos(i * M_PI / 180)/2);
+        positions.push_back(1.0f);
+        positions.push_back(sin((i+(360/circleCount)) * M_PI / 180)/2);
+        positions.push_back(cos((i+(360/circleCount)) * M_PI / 180)/2);
+        positions.push_back(1.0f);
+        positions.push_back(0.0f);
+        positions.push_back(0.0f);
+        positions.push_back(1.0f);
+
+    }
+
+    std::cout << "Positions:" << "\r\n";
+
+    /*for(int i=0; i<positions.size(); i+= 3){
+        std::cout << positions[i] << ' ';
+        std::cout << positions[i+1] << ' ';
+        std::cout << positions[i+2] << ' ';
+        std::cout << "\r\n";
+    }*/
+
+
+    createArrayBuffer(positions, posVBO);
+
+    std::vector<float> colors;
+
+    for(int i = 0; i <= vertexCount*circleCount; i++){
+        float random = ((float) rand()) / (float) RAND_MAX;
+        colors.push_back(random);
+    }
+
+    createArrayBuffer( colors, colorVBO);
 
     // tell how many vertices to draw
-    vertexCount = 3;
 
     // create a vertex array object (VAO) on OpenGL and save a handle to it
     glGenVertexArrays(1, &VAO);
@@ -212,13 +241,20 @@ void setupShape(const unsigned int shaderProgram,unsigned int &VAO, unsigned int
     glVertexAttribPointer(posAttributeLocation, posSize, GL_FLOAT, GL_FALSE, 0, 0);
 
     // set vertex shader attribute "aColor"
-    glBindBuffer(GL_ARRAY_BUFFER, colorVBO);
+    /*glBindBuffer(GL_ARRAY_BUFFER, colorVBO);
 
     int colorSize = 3;
     int colorAttributeLocation = glGetAttribLocation(shaderProgram, "aColor");
 
     glEnableVertexAttribArray(colorAttributeLocation);
-    glVertexAttribPointer(colorAttributeLocation, colorSize, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribPointer(colorAttributeLocation, colorSize, GL_FLOAT, GL_FALSE, 0, 0);*/
+    glUseProgram(shaderProgram);
+    float r = (((float) rand()) / (float) RAND_MAX);
+    float g = (((float) rand()) / (float) RAND_MAX);
+    float b = (((float) rand()) / (float) RAND_MAX);
+
+    int vertexColorLocation = glGetUniformLocation(shaderProgram, "aColor");
+    glUniform3f(vertexColorLocation, r, g, b);
 
 }
 
