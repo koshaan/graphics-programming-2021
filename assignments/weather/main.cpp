@@ -11,16 +11,124 @@
 #include "plane_model.h"
 #include "primitives.h"
 
+using namespace std;
+using namespace glm;
+
 // structure to hold render info
 // -----------------------------
 struct SceneObject{
     unsigned int VAO;
     unsigned int vertexCount;
+    float x,y,z;
     void drawSceneObject() const{
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES,  vertexCount, GL_UNSIGNED_INT, 0);
     }
 };
+
+class Line {
+    int shaderProgram;
+    unsigned int VBO, VAO;
+    vector<float> vertices;
+    vec3 startPoint;
+    vec3 endPoint;
+    mat4 MVP = mat4(1.0);
+    vec3 lineColor;
+public:
+    Line(vec3 start, vec3 end) {
+
+        startPoint = start;
+        endPoint = end;
+        lineColor = vec3(1,1,1);
+
+        const char *vertexShaderSource = "#version 330 core\n"
+                                         "layout (location = 0) in vec3 aPos;\n"
+                                         "uniform mat4 MVP;\n"
+                                         "void main()\n"
+                                         "{\n"
+                                         "   gl_Position = MVP * vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+                                         "}\0";
+        const char *fragmentShaderSource = "#version 330 core\n"
+                                           "out vec4 FragColor;\n"
+                                           "uniform vec3 color;\n"
+                                           "void main()\n"
+                                           "{\n"
+                                           "   FragColor = vec4(color, 1.0f);\n"
+                                           "}\n\0";
+
+        // vertex shader
+        int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+        glCompileShader(vertexShader);
+        // check for shader compile errors
+
+        // fragment shader
+        int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+        glCompileShader(fragmentShader);
+        // check for shader compile errors
+
+        // link shaders
+        shaderProgram = glCreateProgram();
+        glAttachShader(shaderProgram, vertexShader);
+        glAttachShader(shaderProgram, fragmentShader);
+        glLinkProgram(shaderProgram);
+        // check for linking errors
+
+        glDeleteShader(vertexShader);
+        glDeleteShader(fragmentShader);
+
+        vertices = {
+                start.x, start.y, start.z,
+                end.x, end.y, end.z,
+
+        };
+
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        glBindVertexArray(VAO);
+
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices)*vertices.size(), vertices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+
+    }
+
+    int setMVP(glm::mat4 mvp) {
+        MVP = mvp;
+    }
+
+    int setColor(glm::vec3 color) {
+        lineColor = color;
+    }
+
+    vec3 getStartPoint(){
+        return startPoint;
+    }
+
+    vec3 getEndPoint(){
+        return endPoint;
+    }
+
+    int draw() {
+
+
+        glUseProgram(shaderProgram);
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "MVP"), 1, GL_FALSE, &MVP[0][0]);
+        glUniform3fv(glGetUniformLocation(shaderProgram, "color"), 1, &lineColor[0]);
+
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_LINES, 0, 2);
+        return 0;
+    }
+};
+
+
 
 // function declarations
 // ---------------------
@@ -38,11 +146,15 @@ void processInput(GLFWwindow* window);
 void cursor_input_callback(GLFWwindow* window, double posX, double posY);
 void drawCube(glm::mat4 model);
 void drawPlane(glm::mat4 model);
+void createRain(int amount);
+void drawRain(glm::mat4 viewproj);
+void createRainLines(int amount);
+void drawRainLines(mat4 viewproj);
 
 // screen settings
 // ---------------
-const unsigned int SCR_WIDTH = 600;
-const unsigned int SCR_HEIGHT = 600;
+const unsigned int SCR_WIDTH = 1300;
+const unsigned int SCR_HEIGHT = 800;
 
 // global variables used for rendering
 // -----------------------------------
@@ -51,15 +163,24 @@ SceneObject floorObj;
 SceneObject planeBody;
 SceneObject planeWing;
 SceneObject planePropeller;
+std::vector<SceneObject> rainObjects;
 Shader* shaderProgram;
+std::vector<Line> lines;
 
 // global variables used for control
 // ---------------------------------
 float currentTime;
 glm::vec3 camForward(.0f, .0f, -1.0f);
 glm::vec3 camPosition(.0f, 1.6f, 0.0f);
+float rainHeight = 2.0f, rainAmount = 400, rainVelocity = 0.1f;
 float linearSpeed = 0.15f, rotationGain = 30.0f;
 
+float RandomFloat(float a, float b) {
+    float random = ((float) rand()) / (float) RAND_MAX;
+    float diff = b - a;
+    float r = random * diff;
+    return a + r;
+}
 
 int main()
 {
@@ -99,6 +220,7 @@ int main()
     // setup mesh objects
     // ---------------------------------------
     setup();
+    createRainLines(rainAmount);
 
     // set up the z-buffer
     // Notice that the depth range is now set to glDepthRange(-1,1), that is, a left handed coordinate system.
@@ -107,6 +229,7 @@ int main()
     // so let's conform to that
     glDepthRange(-1,1); // make the NDC a LEFT handed coordinate system, with the camera pointing towards +z
     glEnable(GL_DEPTH_TEST); // turn on z-buffer depth test
+    glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     glDepthFunc(GL_LESS); // draws fragments that are closer to the screen in NDC
 
 
@@ -170,11 +293,15 @@ void drawObjects(){
     floorObj.drawSceneObject();
 
     // draw 2 cubes and 2 planes in different locations and with different orientations
-    drawCube(viewProjection * glm::translate(2.0f, 1.f, 2.0f) * glm::rotateY(glm::half_pi<float>()) * scale);
-    drawCube(viewProjection * glm::translate(-2.0f, 1.f, -2.0f) * glm::rotateY(glm::quarter_pi<float>()) * scale);
+
+    //drawCube(viewProjection * glm::translate(2.0f, 1.f, 2.0f) * glm::rotateY(glm::half_pi<float>()) * scale);
+    //drawCube(viewProjection * glm::translate(-2.0f, 1.f, -2.0f) * glm::rotateY(glm::quarter_pi<float>()) * scale);
 
     drawPlane(viewProjection * glm::translate(-2.0f, .5f, 2.0f) * glm::rotateX(glm::quarter_pi<float>()) * scale);
     drawPlane(viewProjection * glm::translate(2.0f, .5f, -2.0f) * glm::rotateX(glm::quarter_pi<float>() * 3.f) * scale);
+
+    drawRainLines(viewProjection);
+
 }
 
 
@@ -184,6 +311,68 @@ void drawCube(glm::mat4 model){
     cube.drawSceneObject();
 }
 
+void drawRain(glm::mat4 viewproj){
+    for(auto rain: rainObjects){
+        float rainHeight = 6.0f;
+        float rainVelocity = 2.0f;
+        glm::mat4 model = viewproj * glm::translate(rain.x + camPosition.x, (rainHeight - fmod( rain.y + currentTime*rainVelocity, rainHeight)), rain.z + camPosition.z);
+        shaderProgram->setMat4("model", model);
+        rain.drawSceneObject();
+    }
+}
+
+void createRain(int amount){
+    for(int i = 0; i < amount; i++){
+        SceneObject rain;
+        rain.VAO = createVertexArray(rainVertices, rainColors, rainIndices);
+        rain.vertexCount = rainIndices.size();
+
+        rain.x = RandomFloat(-2, 2);
+        rain.y = RandomFloat(-10, 10);
+        rain.z = RandomFloat(-3, 3);
+
+        rainObjects.push_back(rain);
+    }
+}
+
+void drawRainLines(mat4 viewproj){
+    /*for(Line line: lines){
+        vec3 startVec = line.getStartPoint();
+        float newY = rainHeight - fmod( startVec.y + currentTime*rainVelocity, rainHeight+2);
+        glm::mat4 model = viewproj * glm::translate(0, newY, 0);
+        //shaderProgram->setMat4("model", model);
+        line.setMVP(model);
+        line.draw();
+    }*/
+
+    for(Line line: lines){
+        vec3 startVec = line.getStartPoint();
+        float newY = rainHeight - fmod( startVec.y + currentTime*rainVelocity, rainHeight*2) + startVec.y/2;
+        glm::mat4 model = viewproj * glm::translate(0, newY, 0);
+        //shaderProgram->setMat4("model", model);
+        line.setMVP(model);
+        line.draw();
+
+
+    }
+
+
+}
+
+void createRainLines(int amount){
+    for(int i = 0; i < amount; i++){
+        glm::vec3 startVec = vec3(RandomFloat(-2, 2),
+                    RandomFloat(-5, rainHeight),
+                    RandomFloat(-3, 3));
+        glm::vec3 endVec = vec3(startVec.x, startVec.y - .1f, startVec.z);
+        Line line(startVec, endVec);
+
+        lines.push_back(line);
+    }
+    cout << lines[0].getStartPoint().y << endl;
+    cout << lines[1].getStartPoint().y << endl;
+
+}
 
 void drawPlane(glm::mat4 model){
 
@@ -217,8 +406,6 @@ void drawPlane(glm::mat4 model){
     planeWing.drawSceneObject();
 }
 
-
-
 void setup(){
     // initialize shaders
     shaderProgram = new Shader("shaders/shader.vert", "shaders/shader.frag");
@@ -240,8 +427,8 @@ void setup(){
 
     planePropeller.VAO = createVertexArray(planePropellerVertices, planePropellerColors, planePropellerIndices);
     planePropeller.vertexCount = planePropellerIndices.size();
-}
 
+}
 
 unsigned int createVertexArray(const std::vector<float> &positions, const std::vector<float> &colors, const std::vector<unsigned int> &indices){
     unsigned int VAO;
@@ -362,8 +549,14 @@ void processInput(GLFWwindow *window) {
         camPosition += glm::cross(forwardInXZ, glm::vec3(0, 1, 0)) * linearSpeed;
     }
 
-}
+    if(glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS){
+        rainVelocity += 0.01f;
+    }
+    if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS){
+        rainVelocity -= 0.01f;
+    }
 
+}
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
 // ---------------------------------------------------------------------------------------------
@@ -373,3 +566,4 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
+
