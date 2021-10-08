@@ -7,7 +7,7 @@ private:
 
 public:
     // this class is only meant to hold information about the 3D model of the airplane
-    // the getInstance and deleted functions below makes this a singleton
+    // the getInstance and deleted functions below make this a singleton
     static PlaneModel& getInstance()
     {
         static PlaneModel instance;
