@@ -26,6 +26,8 @@ struct SceneObject{
     }
 };
 
+
+
 class Line {
     int shaderProgram;
     unsigned int VBO, VAO;
@@ -34,11 +36,13 @@ class Line {
     vec3 endPoint;
     mat4 MVP = mat4(1.0);
     vec3 lineColor;
+    vec3 offSet;
 public:
-    Line(vec3 start, vec3 end) {
+    Line(vec3 start, vec3 end, vec3 offset) {
 
         startPoint = start;
         endPoint = end;
+        offSet = offset;
         lineColor = vec3(1,1,1);
 
         const char *vertexShaderSource = "#version 330 core\n"
@@ -115,6 +119,10 @@ public:
         return endPoint;
     }
 
+    vec3 getOffset(){
+        return offSet;
+    }
+
     int draw() {
 
 
@@ -172,7 +180,7 @@ std::vector<Line> lines;
 float currentTime;
 glm::vec3 camForward(.0f, .0f, -1.0f);
 glm::vec3 camPosition(.0f, 1.6f, 0.0f);
-float rainHeight = 2.0f, rainAmount = 400, rainVelocity = 0.1f;
+float rainHeight = 10.0f, rainAmount = 400, rainVelocity = 5.0f, rainLength = .1f;
 float linearSpeed = 0.15f, rotationGain = 30.0f;
 
 float RandomFloat(float a, float b) {
@@ -336,41 +344,29 @@ void createRain(int amount){
 }
 
 void drawRainLines(mat4 viewproj){
-    /*for(Line line: lines){
-        vec3 startVec = line.getStartPoint();
-        float newY = rainHeight - fmod( startVec.y + currentTime*rainVelocity, rainHeight+2);
-        glm::mat4 model = viewproj * glm::translate(0, newY, 0);
-        //shaderProgram->setMat4("model", model);
-        line.setMVP(model);
-        line.draw();
-    }*/
-
     for(Line line: lines){
-        vec3 startVec = line.getStartPoint();
-        float newY = rainHeight - fmod( startVec.y + currentTime*rainVelocity, rainHeight*2) + startVec.y/2;
-        glm::mat4 model = viewproj * glm::translate(0, newY, 0);
-        //shaderProgram->setMat4("model", model);
+        vec3 offset = line.getOffset();
+        float newY = rainHeight - fmod( offset.y + currentTime*rainVelocity, rainHeight+rainLength);
+        glm::mat4 model = viewproj * glm::translate(offset.x + camPosition.x, newY, offset.z + camPosition.z);
+
         line.setMVP(model);
         line.draw();
-
-
     }
-
-
 }
 
 void createRainLines(int amount){
     for(int i = 0; i < amount; i++){
-        glm::vec3 startVec = vec3(RandomFloat(-2, 2),
-                    RandomFloat(-5, rainHeight),
-                    RandomFloat(-3, 3));
-        glm::vec3 endVec = vec3(startVec.x, startVec.y - .1f, startVec.z);
-        Line line(startVec, endVec);
+        glm::vec3 startVec = vec3(0, rainLength, 0);
+        glm::vec3 endVec = vec3(0,0,0);
+        glm::vec3 offset = vec3(
+                RandomFloat(-2, 2),
+                RandomFloat(0, rainHeight),
+                RandomFloat(-2, 2)
+                );
+        Line line(startVec, endVec, offset);
 
         lines.push_back(line);
     }
-    cout << lines[0].getStartPoint().y << endl;
-    cout << lines[1].getStartPoint().y << endl;
 
 }
 
