@@ -24,125 +24,17 @@ struct SceneObject{
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES,  vertexCount, GL_UNSIGNED_INT, 0);
     }
-};
-
-
-
-class Line {
-    int shaderProgram;
-    unsigned int VBO, VAO;
-    vector<float> vertices;
-    vec3 startPoint;
-    vec3 endPoint;
-    mat4 MVP = mat4(1.0);
-    vec3 lineColor;
-    vec3 offSet;
-public:
-    Line(vec3 start, vec3 end, vec3 offset) {
-
-        startPoint = start;
-        endPoint = end;
-        offSet = offset;
-        lineColor = vec3(1,1,1);
-
-        const char *vertexShaderSource = "#version 330 core\n"
-                                         "layout (location = 0) in vec3 aPos;\n"
-                                         "uniform mat4 MVP;\n"
-                                         "void main()\n"
-                                         "{\n"
-                                         "   gl_Position = MVP * vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-                                         "}\0";
-        const char *fragmentShaderSource = "#version 330 core\n"
-                                           "out vec4 FragColor;\n"
-                                           "uniform vec3 color;\n"
-                                           "void main()\n"
-                                           "{\n"
-                                           "   FragColor = vec4(color, 1.0f);\n"
-                                           "}\n\0";
-
-        // vertex shader
-        int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-        glCompileShader(vertexShader);
-        // check for shader compile errors
-
-        // fragment shader
-        int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-        glCompileShader(fragmentShader);
-        // check for shader compile errors
-
-        // link shaders
-        shaderProgram = glCreateProgram();
-        glAttachShader(shaderProgram, vertexShader);
-        glAttachShader(shaderProgram, fragmentShader);
-        glLinkProgram(shaderProgram);
-        // check for linking errors
-
-        glDeleteShader(vertexShader);
-        glDeleteShader(fragmentShader);
-
-        vertices = {
-                start.x, start.y, start.z,
-                end.x, end.y, end.z,
-
-        };
-
-        glGenVertexArrays(1, &VAO);
-        glGenBuffers(1, &VBO);
+    void drawLineObject() const{
         glBindVertexArray(VAO);
-
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices)*vertices.size(), vertices.data(), GL_STATIC_DRAW);
-
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-
-    }
-
-    int setMVP(glm::mat4 mvp) {
-        MVP = mvp;
-    }
-
-    int setColor(glm::vec3 color) {
-        lineColor = color;
-    }
-
-    vec3 getStartPoint(){
-        return startPoint;
-    }
-
-    vec3 getEndPoint(){
-        return endPoint;
-    }
-
-    vec3 getOffset(){
-        return offSet;
-    }
-
-    int draw() {
-
-
-        glUseProgram(shaderProgram);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "MVP"), 1, GL_FALSE, &MVP[0][0]);
-        glUniform3fv(glGetUniformLocation(shaderProgram, "color"), 1, &lineColor[0]);
-
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_LINES, 0, 2);
-        return 0;
+        glDrawElements(GL_LINES, vertexCount, GL_UNSIGNED_INT, 0);
     }
 };
-
-
 
 // function declarations
 // ---------------------
 unsigned int createArrayBuffer(const std::vector<float> &array);
 unsigned int createElementArrayBuffer(const std::vector<unsigned int> &array);
-unsigned int createVertexArray(const std::vector<float> &positions, const std::vector<float> &colors, const std::vector<unsigned int> &indices);
+unsigned int createVertexArray(const std::vector<float> &positions, const std::vector<float> &colors, const std::vector<unsigned int> &indices, Shader* shader);
 void setup();
 void drawObjects();
 
@@ -154,10 +46,8 @@ void processInput(GLFWwindow* window);
 void cursor_input_callback(GLFWwindow* window, double posX, double posY);
 void drawCube(glm::mat4 model);
 void drawPlane(glm::mat4 model);
-void createRain(int amount);
-void drawRain(glm::mat4 viewproj);
 void createRainLines(int amount);
-void drawRainLines(mat4 viewproj);
+void drawRainLines();
 
 // screen settings
 // ---------------
@@ -171,8 +61,27 @@ SceneObject floorObj;
 SceneObject planeBody;
 SceneObject planeWing;
 SceneObject planePropeller;
-std::vector<SceneObject> rainObjects;
+SceneObject rain;
 Shader* shaderProgram;
+Shader* rainShader;
+
+vector<float> rainVertices{};
+vector<float> rainColors{};
+vector<unsigned int> rainIndices{};
+
+class Line {
+    vec3 offSet;
+public:
+    Line(vec3 offset) {
+        offSet = offset;
+    }
+
+    vec3 getOffset(){
+        return offSet;
+    }
+
+};
+
 std::vector<Line> lines;
 
 // global variables used for control
@@ -180,8 +89,13 @@ std::vector<Line> lines;
 float currentTime;
 glm::vec3 camForward(.0f, .0f, -1.0f);
 glm::vec3 camPosition(.0f, 1.6f, 0.0f);
-float rainHeight = 10.0f, rainAmount = 400, rainVelocity = 5.0f, rainLength = .1f;
+float rainHeight = 10.0f;
 float linearSpeed = 0.15f, rotationGain = 30.0f;
+int rainAmount = 10000, boxSize = 20.0;
+float gravitySpeed = 0.05f, gravityOffset = 0;
+float windSpeed = 0.01f, windOffset = 0;
+float movementMultiplier = 0.5, motionBlur = 1;
+mat4 prevModel = mat4(1.0f);
 
 float RandomFloat(float a, float b) {
     float random = ((float) rand()) / (float) RAND_MAX;
@@ -227,8 +141,8 @@ int main()
 
     // setup mesh objects
     // ---------------------------------------
-    setup();
     createRainLines(rainAmount);
+    setup();
 
     // set up the z-buffer
     // Notice that the depth range is now set to glDepthRange(-1,1), that is, a left handed coordinate system.
@@ -237,9 +151,10 @@ int main()
     // so let's conform to that
     glDepthRange(-1,1); // make the NDC a LEFT handed coordinate system, with the camera pointing towards +z
     glEnable(GL_DEPTH_TEST); // turn on z-buffer depth test
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     glDepthFunc(GL_LESS); // draws fragments that are closer to the screen in NDC
-
 
     // render loop
     // -----------
@@ -264,6 +179,9 @@ int main()
         shaderProgram->use();
         drawObjects();
 
+        rainShader->use();
+        drawRainLines();
+
         glfwSwapBuffers(window);
         glfwPollEvents();
 
@@ -282,7 +200,6 @@ int main()
     return 0;
 }
 
-
 void drawObjects(){
 
     glm::mat4 scale = glm::scale(1.f, 1.f, 1.f);
@@ -292,6 +209,7 @@ void drawObjects(){
     // projection * view = world_to_view -> view_to_perspective_projection
     // or if we want ot match the multiplication order (projection * view), we could read
     // perspective_projection_from_view <- view_from_world
+
     glm::mat4 projection = glm::perspectiveFov(70.0f, (float)SCR_WIDTH, (float)SCR_HEIGHT, .01f, 100.0f);
     glm::mat4 view = glm::lookAt(camPosition, camPosition + camForward, glm::vec3(0,1,0));
     glm::mat4 viewProjection = projection * view;
@@ -302,16 +220,15 @@ void drawObjects(){
 
     // draw 2 cubes and 2 planes in different locations and with different orientations
 
-    //drawCube(viewProjection * glm::translate(2.0f, 1.f, 2.0f) * glm::rotateY(glm::half_pi<float>()) * scale);
-    //drawCube(viewProjection * glm::translate(-2.0f, 1.f, -2.0f) * glm::rotateY(glm::quarter_pi<float>()) * scale);
+    drawCube(viewProjection * glm::translate(2.0f, 1.f, 2.0f) * glm::rotateY(glm::half_pi<float>()) * scale);
+    drawCube(viewProjection * glm::translate(-2.0f, 1.f, -2.0f) * glm::rotateY(glm::quarter_pi<float>()) * scale);
 
     drawPlane(viewProjection * glm::translate(-2.0f, .5f, 2.0f) * glm::rotateX(glm::quarter_pi<float>()) * scale);
     drawPlane(viewProjection * glm::translate(2.0f, .5f, -2.0f) * glm::rotateX(glm::quarter_pi<float>() * 3.f) * scale);
 
-    drawRainLines(viewProjection);
+
 
 }
-
 
 void drawCube(glm::mat4 model){
     // draw object
@@ -319,55 +236,67 @@ void drawCube(glm::mat4 model){
     cube.drawSceneObject();
 }
 
-void drawRain(glm::mat4 viewproj){
-    for(auto rain: rainObjects){
-        float rainHeight = 6.0f;
-        float rainVelocity = 2.0f;
-        glm::mat4 model = viewproj * glm::translate(rain.x + camPosition.x, (rainHeight - fmod( rain.y + currentTime*rainVelocity, rainHeight)), rain.z + camPosition.z);
-        shaderProgram->setMat4("model", model);
-        rain.drawSceneObject();
-    }
-}
+void drawRainLines(){
 
-void createRain(int amount){
-    for(int i = 0; i < amount; i++){
-        SceneObject rain;
-        rain.VAO = createVertexArray(rainVertices, rainColors, rainIndices);
-        rain.vertexCount = rainIndices.size();
+    glm::mat4 projection = glm::perspectiveFov(70.0f, (float)SCR_WIDTH, (float)SCR_HEIGHT, .01f, 100.0f);
+    glm::mat4 view = glm::lookAt(camPosition, camPosition + camForward, glm::vec3(0,1,0));
+    glm::mat4 viewProjection = projection * view;
 
-        rain.x = RandomFloat(-2, 2);
-        rain.y = RandomFloat(-10, 10);
-        rain.z = RandomFloat(-3, 3);
+    gravityOffset += gravitySpeed; // update the y position
+    windOffset += windSpeed;
+    //technically can overflow if we let it run forever
 
-        rainObjects.push_back(rain);
-    }
-}
+    vec3 offset = vec3(windOffset, -gravityOffset, 0);
+    offset -= camPosition + camForward + vec3(boxSize/2);
+    offset = mod(offset, vec3(boxSize));
+    // math from slides
 
-void drawRainLines(mat4 viewproj){
-    for(Line line: lines){
-        vec3 offset = line.getOffset();
-        float newY = rainHeight - fmod( offset.y + currentTime*rainVelocity, rainHeight+rainLength);
-        glm::mat4 model = viewproj * glm::translate(offset.x + camPosition.x, newY, offset.z + camPosition.z);
+    rainShader->setMat4("model", viewProjection);
+    rainShader->setMat4("prevModel", prevModel);
+    rainShader->setVec3("offset", offset);
+    rainShader->setVec3("camPosition", camPosition);
+    rainShader->setVec3("camForward", camForward);
+    rainShader->setFloat("windSpeed", windSpeed);
+    rainShader->setFloat("boxSize", boxSize);
+    rainShader->setFloat("motionBlurMultiplier", motionBlur); // reduce hyper-space effect
 
-        line.setMVP(model);
-        line.draw();
-    }
+    rain.drawLineObject();
+    prevModel = viewProjection;
 }
 
 void createRainLines(int amount){
     for(int i = 0; i < amount; i++){
-        glm::vec3 startVec = vec3(0, rainLength, 0);
-        glm::vec3 endVec = vec3(0,0,0);
         glm::vec3 offset = vec3(
-                RandomFloat(-2, 2),
-                RandomFloat(0, rainHeight),
-                RandomFloat(-2, 2)
+                RandomFloat(-boxSize, boxSize),
+                RandomFloat(0, boxSize),
+                RandomFloat(-boxSize, boxSize)
                 );
-        Line line(startVec, endVec, offset);
+        Line line(offset);
 
         lines.push_back(line);
     }
+    for(int i = 0; i < amount; i+=2){
+        // make in pairs of two
+        vec3 offset = lines[i].getOffset();
 
+        rainVertices.push_back(offset.x);
+        rainVertices.push_back(offset.y);
+        rainVertices.push_back(offset.z);
+        rainVertices.push_back(offset.x);
+        rainVertices.push_back(offset.y);
+        rainVertices.push_back(offset.z);
+        rainIndices.push_back(i);
+        rainIndices.push_back(i+1);
+        rainColors.push_back(1); // all white, will be changed in shader.
+        rainColors.push_back(1);
+        rainColors.push_back(1);
+        rainColors.push_back(1);
+        rainColors.push_back(1);
+        rainColors.push_back(1);
+        rainColors.push_back(1);
+        rainColors.push_back(1);
+
+    }
 }
 
 void drawPlane(glm::mat4 model){
@@ -405,28 +334,33 @@ void drawPlane(glm::mat4 model){
 void setup(){
     // initialize shaders
     shaderProgram = new Shader("shaders/shader.vert", "shaders/shader.frag");
+    rainShader = new Shader("shaders/rain.vert", "shaders/rain.frag");
 
     // load floor mesh into openGL
-    floorObj.VAO = createVertexArray(floorVertices, floorColors, floorIndices);
+
+    floorObj.VAO = createVertexArray(floorVertices, floorColors, floorIndices, shaderProgram);
     floorObj.vertexCount = floorIndices.size();
 
     // load cube mesh into openGL
-    cube.VAO = createVertexArray(cubeVertices, cubeColors, cubeIndices);
+    cube.VAO = createVertexArray(cubeVertices, cubeColors, cubeIndices, shaderProgram);
     cube.vertexCount = cubeIndices.size();
 
     // load plane meshes into openGL
-    planeBody.VAO = createVertexArray(planeBodyVertices, planeBodyColors, planeBodyIndices);
+    planeBody.VAO = createVertexArray(planeBodyVertices, planeBodyColors, planeBodyIndices, shaderProgram);
     planeBody.vertexCount = planeBodyIndices.size();
 
-    planeWing.VAO = createVertexArray(planeWingVertices, planeWingColors, planeWingIndices);
+    planeWing.VAO = createVertexArray(planeWingVertices, planeWingColors, planeWingIndices, shaderProgram);
     planeWing.vertexCount = planeWingIndices.size();
 
-    planePropeller.VAO = createVertexArray(planePropellerVertices, planePropellerColors, planePropellerIndices);
+    planePropeller.VAO = createVertexArray(planePropellerVertices, planePropellerColors, planePropellerIndices, shaderProgram);
     planePropeller.vertexCount = planePropellerIndices.size();
+
+    rain.VAO = createVertexArray(rainVertices, rainColors, rainIndices, rainShader);
+    rain.vertexCount = rainIndices.size();
 
 }
 
-unsigned int createVertexArray(const std::vector<float> &positions, const std::vector<float> &colors, const std::vector<unsigned int> &indices){
+unsigned int createVertexArray(const std::vector<float> &positions, const std::vector<float> &colors, const std::vector<unsigned int> &indices, Shader* shader){
     unsigned int VAO;
     glGenVertexArrays(1, &VAO);
     // bind vertex array object
@@ -434,13 +368,13 @@ unsigned int createVertexArray(const std::vector<float> &positions, const std::v
 
     // set vertex shader attribute "pos"
     createArrayBuffer(positions); // creates and bind  the VBO
-    int posAttributeLocation = glGetAttribLocation(shaderProgram->ID, "pos");
+    int posAttributeLocation = glGetAttribLocation(shader->ID, "pos");
     glEnableVertexAttribArray(posAttributeLocation);
     glVertexAttribPointer(posAttributeLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
     // set vertex shader attribute "color"
     createArrayBuffer(colors); // creates and bind the VBO
-    int colorAttributeLocation = glGetAttribLocation(shaderProgram->ID, "color");
+    int colorAttributeLocation = glGetAttribLocation(shader->ID, "color");
     glEnableVertexAttribArray(colorAttributeLocation);
     glVertexAttribPointer(colorAttributeLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
@@ -449,7 +383,6 @@ unsigned int createVertexArray(const std::vector<float> &positions, const std::v
 
     return VAO;
 }
-
 
 unsigned int createArrayBuffer(const std::vector<float> &array){
     unsigned int VBO;
@@ -460,7 +393,6 @@ unsigned int createArrayBuffer(const std::vector<float> &array){
 
     return VBO;
 }
-
 
 unsigned int createElementArrayBuffer(const std::vector<unsigned int> &array){
     unsigned int EBO;
@@ -487,7 +419,7 @@ void cursor_input_callback(GLFWwindow* window, double posX, double posY){
     // TODO - rotate the camera position based on mouse movements
     //  if you decide to use the lookAt function, make sure that the up vector and the
     //  vector from the camera position to the lookAt target are not collinear
-
+    motionBlur = 1;
     // get cursor position and scale it down to a smaller range
     int screenW, screenH;
     glfwGetWindowSize(window, &screenW, &screenH);
@@ -532,24 +464,21 @@ void processInput(GLFWwindow *window) {
     glm::vec3 forwardInXZ = glm::normalize(glm::vec3(camForward.x, 0, camForward.z));
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
         camPosition += forwardInXZ * linearSpeed;
+        motionBlur = movementMultiplier;
     }
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
         camPosition -= forwardInXZ * linearSpeed;
+        motionBlur = movementMultiplier;
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
         // vector perpendicular to camera forward and Y-axis
         camPosition -= glm::cross(forwardInXZ, glm::vec3(0, 1, 0)) * linearSpeed;
+        motionBlur = movementMultiplier;
     }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
         // vector perpendicular to camera forward and Y-axis
         camPosition += glm::cross(forwardInXZ, glm::vec3(0, 1, 0)) * linearSpeed;
-    }
-
-    if(glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS){
-        rainVelocity += 0.01f;
-    }
-    if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS){
-        rainVelocity -= 0.01f;
+        motionBlur = movementMultiplier;
     }
 
 }
