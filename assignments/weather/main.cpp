@@ -90,10 +90,10 @@ glm::vec3 camForward(.0f, .0f, -1.0f);
 glm::vec3 camPosition(.0f, 1.6f, 0.0f);
 float rainHeight = 10.0f;
 float linearSpeed = 0.15f, rotationGain = 30.0f;
-int rainAmount = 50000, boxSize = 20.0;
-float gravitySpeed = 0.05f, gravityOffset = 0;
+int rainAmount = 10000, boxSize = 20.0;
+float gravitySpeed = 0.25f, gravityOffset = 0;
 float windSpeed = 0.01f, windOffset = 0;
-float movementMultiplier = 0.5, motionBlur = 1;
+float movementMultiplier = 0.2, motionBlur = 1;
 mat4 prevModel = mat4(1.0f);
 
 float RandomFloat(float a, float b) {
