@@ -65,10 +65,6 @@ SceneObject rain;
 Shader* shaderProgram;
 Shader* rainShader;
 
-vector<float> rainVertices{};
-vector<float> rainColors{};
-vector<unsigned int> rainIndices{};
-
 class Line {
     vec3 offSet;
 public:
@@ -82,7 +78,10 @@ public:
 
 };
 
-std::vector<Line> lines;
+vector<float> rainVertices{};
+vector<float> rainColors{};
+vector<unsigned int> rainIndices{};
+vector<Line> lines;
 
 // global variables used for control
 // ---------------------------------
@@ -337,7 +336,6 @@ void setup(){
     rainShader = new Shader("shaders/rain.vert", "shaders/rain.frag");
 
     // load floor mesh into openGL
-
     floorObj.VAO = createVertexArray(floorVertices, floorColors, floorIndices, shaderProgram);
     floorObj.vertexCount = floorIndices.size();
 
@@ -355,6 +353,7 @@ void setup(){
     planePropeller.VAO = createVertexArray(planePropellerVertices, planePropellerColors, planePropellerIndices, shaderProgram);
     planePropeller.vertexCount = planePropellerIndices.size();
 
+    // rain :-)
     rain.VAO = createVertexArray(rainVertices, rainColors, rainIndices, rainShader);
     rain.vertexCount = rainIndices.size();
 
