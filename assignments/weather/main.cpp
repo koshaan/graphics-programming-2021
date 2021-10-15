@@ -90,7 +90,7 @@ glm::vec3 camForward(.0f, .0f, -1.0f);
 glm::vec3 camPosition(.0f, 1.6f, 0.0f);
 float rainHeight = 10.0f;
 float linearSpeed = 0.15f, rotationGain = 30.0f;
-int rainAmount = 10000, boxSize = 20.0;
+int rainAmount = 50000, boxSize = 20.0;
 float gravitySpeed = 0.05f, gravityOffset = 0;
 float windSpeed = 0.01f, windOffset = 0;
 float movementMultiplier = 0.5, motionBlur = 1;
@@ -274,9 +274,10 @@ void createRainLines(int amount){
 
         lines.push_back(line);
     }
-    for(int i = 0; i < amount; i+=2){
+
+    for(int i = 0; i < amount * 2; i+=2){
         // make in pairs of two
-        vec3 offset = lines[i].getOffset();
+        vec3 offset = lines[i/2].getOffset();
 
         rainVertices.push_back(offset.x);
         rainVertices.push_back(offset.y);
@@ -388,6 +389,7 @@ unsigned int createArrayBuffer(const std::vector<float> &array){
     glGenBuffers(1, &VBO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
     glBufferData(GL_ARRAY_BUFFER, array.size() * sizeof(GLfloat), &array[0], GL_STATIC_DRAW);
 
     return VBO;
@@ -396,7 +398,6 @@ unsigned int createArrayBuffer(const std::vector<float> &array){
 unsigned int createElementArrayBuffer(const std::vector<unsigned int> &array){
     unsigned int EBO;
     glGenBuffers(1, &EBO);
-
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, array.size() * sizeof(unsigned int), &array[0], GL_STATIC_DRAW);
 
